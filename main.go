@@ -1,13 +1,8 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	echoMiddleware "github.com/labstack/echo/v4/middleware"
@@ -53,20 +48,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create MongoDB client: %v", err)
 	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := dbClient.Close(ctx); err != nil {
-			log.Printf("Error closing MongoDB connection: %v", err)
-		}
-	}()
-
-	// Set default database if specified
-	if cfg.Database != "" {
-		if err := dbClient.SetDatabase(cfg.Database); err != nil {
-			log.Printf("Warning: Failed to set default database: %v", err)
-		}
-	}
 
 	// Create Echo instance
 	e := echo.New()
@@ -101,28 +82,9 @@ func main() {
 	// Swagger documentation (no auth for easier access)
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
 
-	// Start server in a goroutine
-	go func() {
-		port := ":" + cfg.ServerPort
-		if err := e.Start(port); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Failed to start server: %v", err)
-		}
-	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
-
-	log.Println("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := e.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
-	}
-
-	log.Println("Server exited")
+	// Start server
+	port := ":" + cfg.ServerPort
+	e.Logger.Fatal(e.Start(port))
 }
 
 // setupMongoRoutes configures all MongoDB proxy routes with appropriate authentication
